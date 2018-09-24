@@ -19,7 +19,7 @@ exports.createTables = async () => {
     await db.all("SELECT COUNT(*) FROM sqlite_master WHERE type = \"table\" AND name = \"user\";")
         .then((rows) => {
             if (rows[0]['COUNT(*)'] < 1) {
-                db.run('CREATE TABLE user(id text PRIMARY KEY, sub text, name text);');
+                db.run('CREATE TABLE user(id text PRIMARY KEY, uid text, name text);');
                 console.log("Created user table");
             } else {
                 console.log("Table user exists");
@@ -71,13 +71,13 @@ exports.createTables = async () => {
 };
 
 exports.user = {
-    create: async (sub) => {
+    create: async (uid) => {
         let db = await dbPromise;
         let id = uuidv4();
-        sub = xss(sub);
-        await db.run(`INSERT INTO user(id, sub) VALUES("${id}", "${sub}");`)
+        uid = xss(uid);
+        await db.run(`INSERT INTO user(id, uid) VALUES("${id}", "${uid}");`)
             .then(() => {
-                console.log(`Inserted user: ${id}, ${sub}`);
+                console.log(`Inserted user: ${id}, ${uid}`);
             }).catch((err) => {
                 handleError(err);
             });
@@ -94,12 +94,24 @@ exports.user = {
                 handleError(err);
             });
     },
-    getBySub: async (sub) => {
+    getByUid: async (uid) => {
         let db = await dbPromise;
-        sub = xss(sub);
-        return await db.all(`SELECT * FROM user WHERE sub=\"${sub}\";`)
+        uid = xss(uid);
+        return await db.all(`SELECT * FROM user WHERE uid=\"${uid}\";`)
             .then((result) => {
                 return result.map((row) => row.id);
+            })
+            .catch((err, rows) => {
+                handleError(err);
+            });
+    },
+    getByIdAndUid: async (id, uid) => {
+        let db = await dbPromise;
+        id = xss(id);
+        uid = xss(uid);
+        return await db.get(`SELECT * FROM user WHERE uid=\"${uid}\" AND id=\"${id}\";`)
+            .then((result) => {
+                return result;
             })
             .catch((err, rows) => {
                 handleError(err);
@@ -230,7 +242,7 @@ exports.claim = {
         let contextString = JSON.stringify(context);
         let datetime = Date.now();
         await db.get(`SELECT id FROM claim WHERE owner="${owner}" AND name="${name}";`)
-            .then((row) => {
+            .then(async (row) => {
                 if (typeof row === "undefined") {
                     await db.run(`INSERT INTO claim(id, owner, name, value, datetime, context) VALUES("${id}", "${owner}", "${name}", "${value}", "${datetime}", "${contextString}");`) 
                         .then(() => {
