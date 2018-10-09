@@ -48,6 +48,7 @@ function authenticationRequired(request, response, next) {
 }
 
 app.use(cors());
+app.use(bodyParser());
 
 // Error handling logic
 app.use((err, req, res, next) => {
@@ -116,29 +117,37 @@ app.delete('/api/v1/user/:id', authenticationRequired, (request, response) => {
     }, response);
 });
 
-// // Initiate New Request
-// // POST /api/v1/request 
-// // body: { owner: uuid of owner, claims: List of claims to request access to }
-// app.post('/api/v1/request', authenticationRequired, (request, response) => {
-//     withErrorHandler(async () => {
-//         if (!request.body || !request.body.owner || !uuidValidate(request.body.owner)) {
-//             return response.status(400).send(JSON.stringify(responses.badRequest("Invalid or missing parameter: owner")));
-//         }
-//         if (!request.body || !request.body.requester || !uuidValidate(request.body.requester)) {
-//             return response.status(400).send(JSON.stringify(responses.badRequest("Invalid or missing parameter: requester")));
-//         }
-//         if (!request.body || !request.body.claims || !Array.isArray(request.body.claims)) {
-//             return response.status(400).send(JSON.stringify(responses.badRequest("Invalid or missing parameter: claims")));
-//         }
-//         let owner = xss(request.body.owner);
-//         let requester = xss(request.body.requester);
-//         let claims = request.body.claims;
-//         let id = await models.request.new(owner, requester, claims);
-//         // Notify the requestee
-//         await models.notification.new(owner, models.notification.types.new_request, {requester});
-//         response.status(201).send(JSON.stringify(responses.created(id)));
-//     }, response);
-// });
+// Initiate New Request
+// POST /api/v1/request 
+// body: { owner: uuid of owner, claims: List of claims to request access to }
+app.post('/api/v1/request', authenticationRequired, (request, response) => {
+    withErrorHandler(async () => {
+        console.log(request.body);
+        if (!request.body || !request.body.owner || !uuidValidate(request.body.owner)) {
+            return response.status(400).send(JSON.stringify(responses.badRequest("Invalid or missing parameter: owner")));
+        }
+        if (!request.body || !request.body.requester || !uuidValidate(request.body.requester)) {
+            return response.status(400).send(JSON.stringify(responses.badRequest("Invalid or missing parameter: requester")));
+        }
+        if (!request.body || !request.body.attribute || typeof request.body.attribute !== "string") {
+            return response.status(400).send(JSON.stringify(responses.badRequest("Invalid or missing parameter: attribute")));
+        }
+        let owner = xss(request.body.owner);
+        let requester = xss(request.body.requester);
+        let attribute = xss(request.body.attribute);
+        // Requester must belong to caller
+        let verifiedOwnership = await models.user.getByIdAndUid(requester, request.userinfo.uid).then(row => {
+            return typeof row !== "undefined";
+        });
+        if (!verifiedOwnership) {
+            return response.status(401).send(JSON.stringify(responses.unauthorized("Requester must own id")))
+        }
+        let id = await models.request.new(owner, requester, attribute);
+        // Notify the requestee
+        await models.notification.new(owner, models.notification.types.new_request, {requester});
+        response.status(201).send(JSON.stringify(responses.created(id)));
+    }, response);
+}); 
 
 // // Delete request
 // // DELETE /api/v1/request/:id

@@ -6,6 +6,8 @@ const Promise = require('bluebird');
 
 const dbPromise = sqlite.open(path.join(__dirname, '..', 'db', 'database.db'), { Promise });
 
+exports.dbPromise = dbPromise;
+
 let handleError = (err) => {
     if (err) {
         console.log(err.message);
@@ -32,7 +34,7 @@ exports.createTables = async () => {
     await db.all("SELECT COUNT(*) FROM sqlite_master WHERE type = \"table\" AND name = \"request\";")
         .then((rows) => {
             if (rows[0]['COUNT(*)'] < 1) {
-                db.run('CREATE TABLE request(id text PRIMARY KEY, owner text, requester text, datetime numeric, claims text, accepted numeric);');
+                db.run('CREATE TABLE request(id text PRIMARY KEY, owner text, requester text, datetime numeric, attribute text, accepted numeric);');
                 console.log("Created request table");
             } else {
                 console.log("Table request exists");
@@ -42,17 +44,17 @@ exports.createTables = async () => {
             console.log("Error selecting table request from sqlite_master");
             throw err;
         });
-    await db.all("SELECT COUNT(*) FROM sqlite_master WHERE type = \"table\" AND name = \"claim\";")
+    await db.all("SELECT COUNT(*) FROM sqlite_master WHERE type = \"table\" AND name = \"attribute\";")
         .then((rows) => {
             if (rows[0]['COUNT(*)'] < 1) {
-                db.run('CREATE TABLE claim(id text PRIMARY KEY, owner text, name text, value text, datetime numeric, context text);');
-                console.log("Created claim table");
+                db.run('CREATE TABLE attribute(id text PRIMARY KEY, owner text, name text, value text, datetime numeric, context text);');
+                console.log("Created attribute table");
             } else {
-                console.log("Table claim exists");
+                console.log("Table attribute exists");
             }
         })
         .catch((err) => {
-            console.log("Error selecting table claim from sqlite_master");
+            console.log("Error selecting table attribute from sqlite_master");
             throw err;
         });
     await db.all("SELECT COUNT(*) FROM sqlite_master WHERE type = \"table\" AND name = \"notification\";")
@@ -183,15 +185,18 @@ exports.request = {
                 handleError(err);
             });
     },
-    new: async (owner, requester, claims) => {
+    new: async (owner, requester, attribute) => {
         let db = await dbPromise;
         let id = uuidv4();
         owner = xss(owner);
-        claims = JSON.stringify(claims);
-        let datetime = Date.now();
-        await db.run(`INSERT INTO request(id, owner, requester, datetime, claims, accepted) VALUES("${id}", "${owner}", "${requester}", "${datetime}", "${claims}", false);`) 
+        attribute = xss(attribute);
+        requester = xss(requester);
+        let datetime = Date.now().toString();
+        let query = `INSERT INTO request(id, owner, requester, datetime, attribute, accepted) VALUES("${id}", "${owner}", "${requester}", "${datetime}", "${attribute}", false);`;
+        console.log(query);
+        await db.run(query) 
             .then(() => {
-                console.log(`Inserted request: ${id}, ${owner}, ${requester}, ${datetime}, ${claims}, ${accepted}`);
+                console.log(`Inserted request: ${id}, ${owner}, ${requester}, ${datetime}, ${attribute}, false`);
             })
             .catch((err) => {
                 handleError(err);
@@ -199,13 +204,13 @@ exports.request = {
     }
 }
 
-exports.claim = {
+exports.attribute = {
     delete: async (id) => {
         let db = await dbPromise;
         id = xss(id);
-        await db.run(`DELETE FROM claim WHERE id="${id}";`) 
+        await db.run(`DELETE FROM attribute WHERE id="${id}";`) 
             .then(() => {
-                console.log(`Deleted claim: ${id}`);
+                console.log(`Deleted attribute: ${id}`);
             })
             .catch((err) => {
                 handleError(err);
@@ -213,7 +218,7 @@ exports.claim = {
     },
     get: async (id) => {
         let db = await dbPromise;
-        return await db.get(`SELECT * FROM claim WHERE id="${id}";`)
+        return await db.get(`SELECT * FROM attribute WHERE id="${id}";`)
             .then((row) => {
                 return row;
             })
@@ -223,7 +228,7 @@ exports.claim = {
     },
     getByOwner: async (owner) => {
         let db = await dbPromise;
-        return await db.all(`SELECT * FROM claim WHERE owner="${owner}";`)
+        return await db.all(`SELECT * FROM attribute WHERE owner="${owner}";`)
             .then((rows) => {
                 return rows;
             })
@@ -241,20 +246,20 @@ exports.claim = {
         }
         let contextString = JSON.stringify(context);
         let datetime = Date.now();
-        await db.get(`SELECT id FROM claim WHERE owner="${owner}" AND name="${name}";`)
+        await db.get(`SELECT id FROM attribute WHERE owner="${owner}" AND name="${name}";`)
             .then(async (row) => {
                 if (typeof row === "undefined") {
-                    await db.run(`INSERT INTO claim(id, owner, name, value, datetime, context) VALUES("${id}", "${owner}", "${name}", "${value}", "${datetime}", "${contextString}");`) 
+                    await db.run(`INSERT INTO attribute(id, owner, name, value, datetime, context) VALUES("${id}", "${owner}", "${name}", "${value}", "${datetime}", "${contextString}");`) 
                         .then(() => {
-                            console.log(`Inserted claim: ${id}, ${owner}, ${name}, ${value}, ${datetime}, ${contextString}`);
+                            console.log(`Inserted attribute: ${id}, ${owner}, ${name}, ${value}, ${datetime}, ${contextString}`);
                         })
                         .catch((err) => {
                             handleError(err);
                         });
                 } else {
-                    await db.run(`UPDATE claim SET owner="${owner}", name="${name}", value="${value}", datetime="${datetime}", context="${contextString}" WHERE id="${row.id}");`) 
+                    await db.run(`UPDATE attribute SET owner="${owner}", name="${name}", value="${value}", datetime="${datetime}", context="${contextString}" WHERE id="${row.id}");`) 
                         .then(() => {
-                            console.log(`Updated claim: ${id}, ${owner}, ${name}, ${value}, ${datetime}, ${contextString}`);
+                            console.log(`Updated attribute: ${id}, ${owner}, ${name}, ${value}, ${datetime}, ${contextString}`);
                         })
                         .catch((err) => {
                             handleError(err);
